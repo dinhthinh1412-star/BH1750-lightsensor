@@ -298,6 +298,7 @@ let errorCount = 0;
 const MAX_ERRORS = 3;
 let isServerDown = false;
 let controller = new AbortController();
+let statsTimer, chartTimer; // Thêm biến quản lý timer
 
 function setupAutocomplete(inputId, listId, type, dateInputId = null) {
     const input = document.getElementById(inputId);
@@ -361,7 +362,7 @@ function setupAutocomplete(inputId, listId, type, dateInputId = null) {
                         };
                         list.appendChild(div);
                     });
-                });
+                }).catch(e => {}); // Thêm catch nhẹ để không văng lỗi ra console nếu gõ phím lúc mất mạng
         }, 200);
     }
     input.addEventListener("input", function() { fetchSuggestions(this.value); });
@@ -419,11 +420,14 @@ document.addEventListener("click", function (e) {
 
 let lastChartData = [];
 
+// Hàm dập cầu dao
 function handleServerError() {
     errorCount++;
     if (errorCount >= MAX_ERRORS && !isServerDown) {
         isServerDown = true;
-        controller.abort();
+        controller.abort(); // Chặt đứt ngay lập tức các request đang treo
+        clearTimeout(statsTimer); // Xóa lịch chạy tiếp theo
+        clearTimeout(chartTimer);
         
         const dateEl = document.getElementById("chart-date");
         dateEl.innerText = "⚠️ Mất kết nối Server";
@@ -452,6 +456,9 @@ async function updateStats() {
         }
     } catch (e) {
         if (e.name !== 'AbortError') handleServerError();
+    } finally {
+        // Chỉ chạy lại nếu server chưa chết (tạo vòng lặp đệ quy)
+        if (!isServerDown) statsTimer = setTimeout(updateStats, 1000);
     }
 }
 
@@ -531,12 +538,15 @@ async function updateChart() {
         renderLineChart();
     } catch (e) {
         if (e.name !== 'AbortError') handleServerError();
+    } finally {
+        // Đợi fetch xong hoặc lỗi xong mới lên lịch gọi tiếp
+        if (!isServerDown) chartTimer = setTimeout(updateChart, 1000);
     }
 }
 
 window.addEventListener('resize', renderLineChart);
-setInterval(updateStats, 1000);
-setInterval(updateChart, 1000);
+
+// Không dùng setInterval nữa, gọi thủ công lần 1, các lần sau đệ quy tự chạy
 updateStats();
 updateChart();
 </script>
