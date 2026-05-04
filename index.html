@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>BH1750 Dashboard - Live Chart & Independent Search</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #0f4c5c;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: white;
+            width: 95%;
+            max-width: 1500px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            position: relative;
+            min-height: 650px;
+            border-radius: 12px;
+        }
+
+        /* --- CỤM THỐNG KÊ (TOP LEFT) --- */
+        .stats-group {
+            position: absolute;
+            top: 30px;
+            left: 50px;
+            z-index: 1000;
+        }
+        h1 {
+            font-size: 22px;
+            color: #333;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .lux-val {
+            font-size: 65px;
+            color: #f39c12;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        .stat-box {
+            font-size: 18px;
+            color: #666;
+            line-height: 1.4;
+            margin-bottom: 20px;
+        }
+
+        /* --- PANEL XUẤT DỮ LIỆU (DƯỚI STATS - NHỎ LẠI) --- */
+        .export-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #e8f4f8;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #bcdae5;
+            width: fit-content;
+        }
+        .export-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .export-panel label {
+            font-size: 12px;
+            font-weight: bold;
+            width: 30px;
+        }
+
+        /* --- PANEL TÌM KIẾM (TOP RIGHT) --- */
+        .top-search-panel {
+            position: absolute;
+            top: 30px;
+            right: 50px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            background: #f4f6f7;
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            z-index: 999;
+            border: 1px solid #e1e1e1;
+        }
+
+        /* --- CHUNG CHO INPUT --- */
+        .search-item { display: flex; align-items: center; }
+        .autocomplete input {
+            padding: 6px 8px;
+            font-size: 13px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 85px;
+            text-align: center;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 5px;
+        }
+        .btn-download {
+            flex: 1;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 11px;
+            text-align: center;
+            transition: 0.2s;
+        }
+        .btn-txt { background: #7f8c8d; }
+        .btn-txt:hover { background: #636e72; }
+        .btn-csv { background: #27ae60; }
+        .btn-csv:hover { background: #219150; }
+
+        /* --- BIỂU ĐỒ (DỜI SANG PHẢI/GIỮA) --- */
+        .container {
+            margin-top: 100px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .right-panel {
+            width: 75%;
+            padding-top: 50px;
+        }
+        .chart-container { position: relative; width: 100%; height: 450px; }
+        .chart-box {
+            position: absolute;
+            bottom: 60px; left: 60px; right: 80px; top: 70px;
+            border-right: 3px solid #333;
+            border-bottom: 3px solid #333;
+            height: 320px;
+        }
+        
+        /* CSS Chart Elements */
+        .axis-extension-y { position: absolute; top: -40px; right: -3px; width: 3px; height: 40px; background: #333; }
+        .axis-extension-y::after { content: ""; position: absolute; top: -10px; left: -6.5px; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 12px solid #333; }
+        .chart-box::before { content: "Lux"; position: absolute; top: -65px; right: -42px; font-weight: bold; color: #333; font-size: 16px; }
+        .axis-extension-x { position: absolute; bottom: -3px; left: -60px; height: 3px; width: 60px; background: #333; }
+        .chart-box::after { content: "Time"; position: absolute; bottom: -35px; left: -85px; font-weight: bold; color: #333; font-size: 16px; }
+        .grid-line { position: absolute; width: 100%; height: 0; border-top: 1px dashed #ddd; display: flex; align-items: center; z-index: 1; }
+        .grid-line-x { position: absolute; height: 100%; width: 0; border-left: 1px dashed #ddd; top: 0; z-index: 1; }
+        .scale-text { position: absolute; right: -55px; font-size: 14px; font-weight: bold; color: #777; width: 45px; text-align: left; line-height: 0; top: -1px; }
+        .line-area { position: absolute; bottom: 0; left: 5%; right: 5%; height: 100%; z-index: 10; }
+        #chart-line { transition: all 0.4s ease-out; }
+        .time-labels { position: absolute; bottom: -30px; left: 5%; right: 5%; display: flex; justify-content: space-around; font-size: 12px; color: #444; }
+        .chart-date { position: absolute; bottom: -70px; right: 0; font-size: 14px; font-weight: bold; color: #555; }
+        
+        /* --- CSS CHO AUTOCOMPLETE --- */
+        .autocomplete-items { position: absolute; border: 1px solid #d4d4d4; z-index: 9999; top: 100%; left: 0; right: 0; background-color: #fff; max-height: 200px; overflow-y: auto; }
+        .autocomplete-items div.item-row { padding: 8px; cursor: pointer; border-bottom: 1px solid #d4d4d4; font-size: 12px; text-align: center; }
+        .autocomplete-items div.item-row:hover { background-color: #e9e9e9; }
+        
+        .autocomplete-msg {
+            padding: 8px; 
+            font-size: 11px; 
+            color: #d35400; 
+            background-color: #fdf2e9; 
+            text-align: center; 
+            border-bottom: 1px solid #d4d4d4; 
+            font-weight: bold; 
+            cursor: default;
+        }
+
+        .result-box { font-size: 14px; color: #555; font-weight: bold; padding-left: 10px; border-left: 2px solid #ccc; }
+        #searchedLux { color: #e37e19; font-size: 20px; margin: 0 5px; }
+
+        /* --- NEON DOT --- */
+        .chart-dot {
+            fill: #ff7a00;
+            stroke: white;
+            stroke-width: 2;
+            filter: drop-shadow(0 0 6px #ff7a00);
+            transition: 0.2s;
+            cursor: pointer;
+        }
+        .chart-dot:hover {
+            r: 7;
+            filter: drop-shadow(0 0 12px #ff7a00);
+        }
+
+        /* --- TOOLTIP --- */
+        .tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 6px 10px;
+            font-size: 12px;
+            border-radius: 6px;
+            pointer-events: none;
+            transform: translate(-50%, -120%);
+            white-space: nowrap;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="stats-group">
+        <h1>Cường độ ánh sáng</h1>
+        <div class="lux-val">
+            <span id="current">0</span>
+            <small style="font-size: 25px">lux</small>
+            <span id="current-time" style="font-size: 18px; color: #7f8c8d; font-weight: normal; margin-left: 8px;"></span>
+        </div>
+        <div class="stat-box">
+            Max: <span id="max">0</span> lux | Min: <span id="min">0</span> lux
+        </div>
+
+        <div class="export-panel">
+            <div style="font-size: 11px; font-weight: bold; color: #27ae60; margin-bottom: 2px;">XUẤT DỮ LIỆU</div>
+            
+            <div class="export-row">
+                <label>Từ:</label>
+                <div class="search-item">
+                    <div class="autocomplete">
+                        <input id="dateStart" type="text" placeholder="dd/mm/yyyy" autocomplete="off">
+                        <div id="start-date-list" class="autocomplete-items"></div>
+                    </div>
+                </div>
+                <div class="search-item">
+                    <div class="autocomplete">
+                        <input id="timeStart" type="text" placeholder="hh:mm:ss" autocomplete="off">
+                        <div id="start-time-list" class="autocomplete-items"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="export-row">
+                <label>Đến:</label>
+                <div class="search-item">
+                    <div class="autocomplete">
+                        <input id="dateEnd" type="text" placeholder="dd/mm/yyyy" autocomplete="off">
+                        <div id="end-date-list" class="autocomplete-items"></div>
+                    </div>
+                </div>
+                <div class="search-item">
+                    <div class="autocomplete">
+                        <input id="timeEnd" type="text" placeholder="hh:mm:ss" autocomplete="off">
+                        <div id="end-time-list" class="autocomplete-items"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-download btn-txt" onclick="downloadFile('txt')">TẢI .TXT</button>
+                <button class="btn-download btn-csv" onclick="downloadFile('xlsx')">TẢI .XLSX</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="top-search-panel">
+        <div style="font-size: 12px; font-weight: bold; color: #0f4c5c;">TRA CỨU NHANH:</div>
+        <div class="search-item">
+            <div class="autocomplete">
+                <input id="dateInput" type="text" placeholder="dd/mm/yyyy" autocomplete="off">
+                <div id="date-autocomplete-list" class="autocomplete-items"></div>
+            </div>
+        </div>
+        <div class="search-item">
+            <div class="autocomplete">
+                <input id="timeInput" type="text" placeholder="hh:mm:ss" autocomplete="off">
+                <div id="time-autocomplete-list" class="autocomplete-items"></div>
+            </div>
+        </div>
+        <div class="search-item result-box">
+            <span id="searchedLux">--</span> lux
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="right-panel">
+            <div class="chart-container">
+                <div class="chart-box">
+                    <div class="axis-extension-y"></div>
+                    <div class="axis-extension-x"></div>
+                    
+                    <div class="grid-line" style="bottom: 20%;"><span class="scale-text" id="m1">30</span></div>
+                    <div class="grid-line" style="bottom: 40%;"><span class="scale-text" id="m2">60</span></div>
+                    <div class="grid-line" style="bottom: 60%;"><span class="scale-text" id="m3">90</span></div>
+                    <div class="grid-line" style="bottom: 80%;"><span class="scale-text" id="m4">120</span></div>
+                    <div class="grid-line" style="bottom: 100%;"><span class="scale-text" id="m5">150</span></div>
+
+                    <div class="grid-line-x" style="left: 14%;"></div>
+                    <div class="grid-line-x" style="left: 32%;"></div>
+                    <div class="grid-line-x" style="left: 50%;"></div>
+                    <div class="grid-line-x" style="left: 68%;"></div>
+                    <div class="grid-line-x" style="left: 86%;"></div>
+
+                    <div class="line-area">
+                        <svg id="chart-svg" width="100%" height="100%">
+                            <polyline id="chart-line" fill="none" stroke="#3498db" stroke-width="4" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+
+                    <div class="time-labels">
+                        <div id="t0"></div>
+                        <div id="t1"></div>
+                        <div id="t2"></div>
+                        <div id="t3"></div>
+                        <div id="t4"></div>
+                    </div>
+                    
+                    <div class="chart-date" id="chart-date">Ngày: --/--/----</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- THẺ TOOLTIP TÀNG HÌNH -->
+<div id="tooltip" class="tooltip"></div>
+
+<script>
+function setupAutocomplete(inputId, listId, type, dateInputId = null) {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+    
+    input.addEventListener("keydown", function(e) {
+        if (type === 'date') handleAutoFormat(e, this, "/", 3);
+        else handleAutoFormat(e, this, ":", 3);
+        
+        if (e.key === "Enter" && inputId === "timeInput") {
+            let parts = this.value.split(':');
+            if (parts.length === 3 && parts[2].length === 1) {
+                parts[2] = "0" + parts[2];
+                this.value = parts.join(':');
+            }
+            fetchLuxValue(document.getElementById("dateInput").value, this.value);
+        }
+    });
+    
+    let debounceTimer;
+    let currentQuery = "";
+
+    function fetchSuggestions(val) {
+        clearTimeout(debounceTimer);
+
+        debounceTimer = setTimeout(() => {
+            currentQuery = val;
+
+            let url = (type === 'date') 
+                ? `/api/suggest-dates?q=${encodeURIComponent(val)}&is_focused=true`
+                : `/api/suggest-times?date=${encodeURIComponent(document.getElementById(dateInputId).value)}&q=${encodeURIComponent(val)}&is_focused=true`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (val !== currentQuery) return;
+                    list.innerHTML = "";
+
+                    let items = data.results || [];
+                    let message = data.message || "";
+
+                    if (items.length === 0) {
+                        if (val) {
+                            let noDataMsg = message ? message : "Không có dữ liệu";
+                            list.innerHTML = `<div class='autocomplete-msg'>${noDataMsg}</div>`;
+                        }
+                        return;
+                    }
+
+                    if (message !== "") {
+                        let msgDiv = document.createElement("div");
+                        msgDiv.className = "autocomplete-msg";
+                        msgDiv.innerHTML = `<i>${message}</i>`;
+                        list.appendChild(msgDiv);
+                    }
+
+                    items.forEach(itemStr => {
+                        let div = document.createElement("div");
+                        div.className = "item-row";
+                        div.innerHTML = itemStr;
+
+                        div.onclick = function() {
+                            input.value = itemStr;
+                            list.innerHTML = "";
+                            if (inputId === "timeInput") {
+                                fetchLuxValue(document.getElementById("dateInput").value, itemStr);
+                            }
+                        };
+
+                        list.appendChild(div);
+                    });
+                });
+
+        }, 200);
+    }
+
+    input.addEventListener("input", function() {
+        fetchSuggestions(this.value);
+    });
+
+    input.addEventListener("focus", function() {
+        fetchSuggestions(this.value);
+    });
+}
+
+setupAutocomplete("dateInput", "date-autocomplete-list", "date");
+setupAutocomplete("timeInput", "time-autocomplete-list", "time", "dateInput");
+setupAutocomplete("dateStart", "start-date-list", "date");
+setupAutocomplete("timeStart", "start-time-list", "time", "dateStart");
+setupAutocomplete("dateEnd", "end-date-list", "date");
+setupAutocomplete("timeEnd", "end-time-list", "time", "dateEnd");
+
+function handleAutoFormat(e, inputElement, separator, maxParts) {
+    if (e.key === " " || e.key === separator) {
+        e.preventDefault(); 
+        let val = inputElement.value;
+        let parts = val.split(separator);
+        let lastPart = parts[parts.length - 1];
+        if (lastPart.length > 0) {
+            if (lastPart.length === 1) parts[parts.length - 1] = "0" + lastPart;
+            if (parts.length < maxParts) inputElement.value = parts.join(separator) + separator;
+            else inputElement.value = parts.join(separator);
+            inputElement.dispatchEvent(new Event('input'));
+        }
+    }
+}
+
+function fetchLuxValue(date, time) {
+    fetch('/api/get-lux-by-time?date=' + encodeURIComponent(date) + '&time=' + encodeURIComponent(time))
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById("searchedLux").innerText = data.lux !== null ? data.lux : "--";
+        }).catch(() => document.getElementById("searchedLux").innerText = "--");
+}
+
+function downloadFile(format) {
+    const dS = document.getElementById("dateStart").value;
+    const tS = document.getElementById("timeStart").value;
+    const dE = document.getElementById("dateEnd").value;
+    const tE = document.getElementById("timeEnd").value;
+    
+    if (!dS || !dE) { 
+        alert("Vui lòng chọn ít nhất là ngày bắt đầu và ngày kết thúc!"); 
+        return; 
+    }
+    
+    const url = `/api/export?start_date=${dS}&start_time=${tS}&end_date=${dE}&end_time=${tE}&format=${format}`;
+    window.location.href = url;
+}
+
+document.addEventListener("click", function (e) {
+    document.querySelectorAll(".autocomplete-items").forEach(list => {
+        if (!e.target.closest(".autocomplete")) list.innerHTML = "";
+    });
+});
+
+let lastChartData = [];
+
+function updateStats() {
+    fetch('/get-stats').then(res => res.json()).then(data => {
+        document.getElementById("current").innerText = data.current;
+        document.getElementById("max").innerText = data.max;
+        document.getElementById("min").innerText = data.min;
+        
+        let timeEl = document.getElementById("current-time");
+        if (timeEl && data.current_time) {
+            timeEl.innerText = `(${data.current_time})`;
+        }
+    }).catch(e => {});
+}
+
+function niceMax(n) {
+    if (n === 0) return 100;
+    let k = Math.floor(Math.log10(n));
+    let base = Math.pow(10, k);
+    let candidates = [base, 2 * base, 5 * base, 10 * base];
+    for (let x of candidates) if (x >= n) return x;
+    return 10 * base;
+}
+
+function renderLineChart() {
+    let rawMax = 200;
+    lastChartData.forEach(v => { if (v.lux > rawMax) rawMax = v.lux; });
+
+    let currentMax = niceMax(rawMax);
+    let step = currentMax / 5;
+
+    for(let i=1; i<=5; i++) {
+        document.getElementById("m"+i).innerText = Math.round(step * i);
+    }
+
+    let svg = document.getElementById("chart-svg");
+    let svgW = svg.clientWidth;
+    let svgH = svg.clientHeight;
+
+    let pointsString = "";
+    let xPositions = [svgW * 0.1, svgW * 0.3, svgW * 0.5, svgW * 0.7, svgW * 0.9];
+    let dateText = "--/--/----";
+
+    // Xóa dot cũ tránh rác DOM
+    svg.querySelectorAll(".chart-dot").forEach(e => e.remove());
+
+    const tooltip = document.getElementById("tooltip");
+
+    for (let i = 0; i < 5; i++) {
+        let lux = (i < lastChartData.length) ? lastChartData[i].lux : 0;
+        let timeRaw = (i < lastChartData.length) ? lastChartData[i].time : "";
+
+        let xPos = xPositions[i];
+        let yPos = svgH - (lux / currentMax * svgH);
+
+        pointsString += `${xPos},${yPos} `;
+
+        let timeText = "";
+        if (timeRaw) {
+            timeText = timeRaw.slice(11, 19);
+
+            if (dateText === "--/--/----") {
+                let parts = timeRaw.slice(0, 10).split('-');
+                dateText = parts[2] + "/" + parts[1] + "/" + parts[0];
+            }
+        }
+
+        document.getElementById("t" + i).innerText = timeText;
+
+        // Chỉ vẽ dot nếu vị trí đó thực sự có dữ liệu
+        if (i < lastChartData.length) {
+            let dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            dot.setAttribute("cx", xPos);
+            dot.setAttribute("cy", yPos);
+            dot.setAttribute("r", 5);
+            dot.setAttribute("class", "chart-dot");
+
+            // Xử lý hiệu ứng Hover
+            dot.addEventListener("mousemove", (e) => {
+                tooltip.style.opacity = 1;
+                tooltip.innerHTML = `${lux} lux<br>${timeText}`;
+
+                // Tính toán vị trí hiển thị chính xác của tooltip
+                let rect = svg.getBoundingClientRect();
+                tooltip.style.left = (rect.left + window.scrollX + xPos) + "px";
+                tooltip.style.top = (rect.top + window.scrollY + yPos) + "px";
+            });
+
+            dot.addEventListener("mouseleave", () => {
+                tooltip.style.opacity = 0;
+            });
+
+            svg.appendChild(dot);
+        }
+    }
+
+    document.getElementById("chart-line").setAttribute("points", pointsString.trim());
+    document.getElementById("chart-date").innerText = "Ngày: " + dateText;
+}
+
+function updateChart() {
+    fetch('/get-last-5').then(res => res.json()).then(data => {
+        lastChartData = data.values;
+        renderLineChart();
+    }).catch(e => {});
+}
+
+window.addEventListener('resize', renderLineChart);
+setInterval(updateStats, 1000);
+setInterval(updateChart, 1000);
+updateStats();
+updateChart();
+</script>
+</body>
+</html>
