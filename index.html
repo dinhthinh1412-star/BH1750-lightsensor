@@ -294,6 +294,9 @@
 <div id="tooltip" class="tooltip"></div>
 
 <script>
+let errorCount = 0;
+const MAX_ERRORS = 5;
+let isServerDown = false;
 function setupAutocomplete(inputId, listId, type, dateInputId = null) {
     const input = document.getElementById(inputId);
     const list = document.getElementById(listId);
