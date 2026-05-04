@@ -295,8 +295,10 @@
 
 <script>
 let errorCount = 0;
-const MAX_ERRORS = 5;
+const MAX_ERRORS = 3;
 let isServerDown = false;
+let controller = new AbortController();
+
 function setupAutocomplete(inputId, listId, type, dateInputId = null) {
     const input = document.getElementById(inputId);
     const list = document.getElementById(listId);
@@ -417,9 +419,30 @@ document.addEventListener("click", function (e) {
 
 let lastChartData = [];
 
-function updateStats() {
+function handleServerError() {
+    errorCount++;
+    if (errorCount >= MAX_ERRORS && !isServerDown) {
+        isServerDown = true;
+        controller.abort();
+        
+        const dateEl = document.getElementById("chart-date");
+        dateEl.innerText = "⚠️ Mất kết nối Server";
+        dateEl.style.color = "#e74c3c";
+        dateEl.style.background = "#fdedec";
+        dateEl.style.padding = "2px 8px";
+        dateEl.style.borderRadius = "4px";
+    }
+}
+
+async function updateStats() {
     if (isServerDown) return;
-    fetch('/get-stats').then(res => res.json()).then(data => {
+
+    try {
+        const res = await fetch('/get-stats', { signal: controller.signal });
+        if (!res.ok) throw new Error();
+        
+        const data = await res.json();
+        errorCount = 0;
         document.getElementById("current").innerText = data.current;
         document.getElementById("max").innerText = data.max;
         document.getElementById("min").innerText = data.min;
@@ -427,7 +450,9 @@ function updateStats() {
         if (timeEl && data.current_time) {
             timeEl.innerText = `(${data.current_time})`;
         }
-    }).catch(e => {});
+    } catch (e) {
+        if (e.name !== 'AbortError') handleServerError();
+    }
 }
 
 function niceMax(n) {
@@ -488,15 +513,25 @@ function renderLineChart() {
         }
     }
     document.getElementById("chart-line").setAttribute("points", pointsString.trim());
-    document.getElementById("chart-date").innerText = "Ngày: " + dateText;
+    if(!isServerDown) {
+        document.getElementById("chart-date").innerText = "Ngày: " + dateText;
+    }
 }
 
-function updateChart() {
+async function updateChart() {
     if (isServerDown) return;
-    fetch('/get-last-5').then(res => res.json()).then(data => {
+
+    try {
+        const res = await fetch('/get-last-5', { signal: controller.signal });
+        if (!res.ok) throw new Error();
+        
+        const data = await res.json();
+        errorCount = 0;
         lastChartData = data.values;
         renderLineChart();
-    }).catch(e => {});
+    } catch (e) {
+        if (e.name !== 'AbortError') handleServerError();
+    }
 }
 
 window.addEventListener('resize', renderLineChart);
