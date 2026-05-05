@@ -294,11 +294,14 @@
 <div id="tooltip" class="tooltip"></div>
 
 <script>
+// Thêm biến BASE_URL để dễ dàng quản lý API kết nối với Render
+const BASE_URL = "https://bh1750-lightsensor-backend.onrender.com";
+
 let errorCount = 0;
 const MAX_ERRORS = 3;
 let isServerDown = false;
 let controller = new AbortController();
-let statsTimer, chartTimer; // Thêm biến quản lý timer
+let statsTimer, chartTimer;
 
 function setupAutocomplete(inputId, listId, type, dateInputId = null) {
     const input = document.getElementById(inputId);
@@ -325,9 +328,10 @@ function setupAutocomplete(inputId, listId, type, dateInputId = null) {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
             currentQuery = val;
+            // Cập nhật URL kết nối với BASE_URL
             let url = (type === 'date') 
-                ? `/api/suggest-dates?q=${encodeURIComponent(val)}&is_focused=true`
-                : `/api/suggest-times?date=${encodeURIComponent(document.getElementById(dateInputId).value)}&q=${encodeURIComponent(val)}&is_focused=true`;
+                ? `${BASE_URL}/api/suggest-dates?q=${encodeURIComponent(val)}&is_focused=true`
+                : `${BASE_URL}/api/suggest-times?date=${encodeURIComponent(document.getElementById(dateInputId).value)}&q=${encodeURIComponent(val)}&is_focused=true`;
 
             fetch(url)
                 .then(res => res.json())
@@ -362,7 +366,7 @@ function setupAutocomplete(inputId, listId, type, dateInputId = null) {
                         };
                         list.appendChild(div);
                     });
-                }).catch(e => {}); // Thêm catch nhẹ để không văng lỗi ra console nếu gõ phím lúc mất mạng
+                }).catch(e => {}); 
         }, 200);
     }
     input.addEventListener("input", function() { fetchSuggestions(this.value); });
@@ -392,7 +396,8 @@ function handleAutoFormat(e, inputElement, separator, maxParts) {
 }
 
 function fetchLuxValue(date, time) {
-    fetch('/api/get-lux-by-time?date=' + encodeURIComponent(date) + '&time=' + encodeURIComponent(time))
+    // Cập nhật URL kết nối với BASE_URL
+    fetch(`${BASE_URL}/api/get-lux-by-time?date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`)
         .then(res => res.json())
         .then(data => {
             document.getElementById("searchedLux").innerText = data.lux !== null ? data.lux : "--";
@@ -408,7 +413,8 @@ function downloadFile(format) {
         alert("Vui lòng chọn ít nhất là ngày bắt đầu và ngày kết thúc!"); 
         return; 
     }
-    const url = `/api/export?start_date=${dS}&start_time=${tS}&end_date=${dE}&end_time=${tE}&format=${format}`;
+    // Cập nhật URL xuất dữ liệu kết nối với BASE_URL
+    const url = `${BASE_URL}/api/export?start_date=${dS}&start_time=${tS}&end_date=${dE}&end_time=${tE}&format=${format}`;
     window.location.href = url;
 }
 
@@ -420,13 +426,12 @@ document.addEventListener("click", function (e) {
 
 let lastChartData = [];
 
-// Hàm dập cầu dao
 function handleServerError() {
     errorCount++;
     if (errorCount >= MAX_ERRORS && !isServerDown) {
         isServerDown = true;
-        controller.abort(); // Chặt đứt ngay lập tức các request đang treo
-        clearTimeout(statsTimer); // Xóa lịch chạy tiếp theo
+        controller.abort(); 
+        clearTimeout(statsTimer); 
         clearTimeout(chartTimer);
         
         const dateEl = document.getElementById("chart-date");
@@ -442,7 +447,8 @@ async function updateStats() {
     if (isServerDown) return;
 
     try {
-        const res = await fetch('/get-stats', { signal: controller.signal });
+        // Cập nhật URL kết nối với BASE_URL
+        const res = await fetch(`${BASE_URL}/get-stats`, { signal: controller.signal });
         if (!res.ok) throw new Error();
         
         const data = await res.json();
@@ -457,7 +463,6 @@ async function updateStats() {
     } catch (e) {
         if (e.name !== 'AbortError') handleServerError();
     } finally {
-        // Chỉ chạy lại nếu server chưa chết (tạo vòng lặp đệ quy)
         if (!isServerDown) statsTimer = setTimeout(updateStats, 1000);
     }
 }
@@ -529,7 +534,8 @@ async function updateChart() {
     if (isServerDown) return;
 
     try {
-        const res = await fetch('/get-last-5', { signal: controller.signal });
+        // Cập nhật URL kết nối với BASE_URL
+        const res = await fetch(`${BASE_URL}/get-last-5`, { signal: controller.signal });
         if (!res.ok) throw new Error();
         
         const data = await res.json();
@@ -539,14 +545,12 @@ async function updateChart() {
     } catch (e) {
         if (e.name !== 'AbortError') handleServerError();
     } finally {
-        // Đợi fetch xong hoặc lỗi xong mới lên lịch gọi tiếp
         if (!isServerDown) chartTimer = setTimeout(updateChart, 1000);
     }
 }
 
 window.addEventListener('resize', renderLineChart);
 
-// Không dùng setInterval nữa, gọi thủ công lần 1, các lần sau đệ quy tự chạy
 updateStats();
 updateChart();
 </script>
